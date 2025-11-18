@@ -1,0 +1,384 @@
+<!doctype html>
+<!--
+spot-mini: Single-file Spotify -> YouTube Music transfer (frontend-only, PKCE)
+
+INSTRUCTIONS
+1) Register an app in Spotify Dashboard and get a CLIENT_ID. Set Redirect URI to the exact URL where you'll host this file (e.g. https://yourdomain.com/).
+   - Enable Authorization Code with PKCE usage in your flow.
+2) Create an OAuth client in Google Cloud Console. Add the same Redirect URI. Use OAuth consent screen (for private/testing you can keep users as Test users).
+   - Required Google OAuth scope used here: https://www.googleapis.com/auth/youtube
+3) Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below.
+4) Deploy this single file to GitHub Pages / Vercel / Netlify (must be served over HTTPS).
+
+CAVEATS
+- This is the minimal, easiest frontend-only approach. Some providers may block direct token exchanges from browser due to CORS; if you see CORS errors, you'll need a tiny backend to proxy the token exchange.
+- Tokens are stored only in sessionStorage for the session. No refresh tokens are persisted.
+- Use for personal or small-user testing. For public apps you'd need Google verification and stricter security.
+
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spot → YouTube Music (mini)</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Arial;margin:0;background:#0f172a;color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh}
+    .card{width:880px;max-width:95%;background:linear-gradient(180deg,#071029, #071421);padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+    h1{margin:0 0 8px;font-size:20px}
+    p{margin:0 0 16px;color:#9fb3d3}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    button{background:#1f6feb;border:none;padding:10px 14px;border-radius:8px;color:white;cursor:pointer}
+    select,button,input{font-size:14px}
+    .muted{color:#7e9ab5;font-size:13px}
+    .col{flex:1;min-width:220px}
+    .progress{height:14px;background:#0b1220;border-radius:8px;overflow:hidden;margin-top:10px}
+    .bar{height:100%;width:0;background:linear-gradient(90deg,#2dd4bf,#06b6d4)}
+    .fail{color:#ffdada;background:#3b1010;padding:8px;border-radius:6px;margin-top:8px}
+    .ok{color:#dffdf5;background:#05322b;padding:8px;border-radius:6px;margin-top:8px}
+    a.link{color:#7ee7ff;text-decoration:underline}
+    footer{margin-top:18px;color:#6f8fb0;font-size:13px}
+    textarea{width:100%;height:90px;background:#071421;border:1px solid #12324a;color:#cfeff6;padding:8px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Spot → YouTube Music (mini)</h1>
+    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session.</p>
+
+    <div class="row">
+      <div class="col">
+        <div><strong>1) Spotify</strong></div>
+        <div style="margin-top:8px">
+          <button id="btnSpotifyLogin">Login with Spotify</button>
+          <span id="spotifyStatus" class="muted" style="margin-left:12px">Not logged in</span>
+        </div>
+        <div style="margin-top:12px">
+          <label class="muted">Choose playlist</label><br>
+          <select id="playlistSelect"><option value="">(login to load)</option></select>
+        </div>
+      </div>
+
+      <div class="col">
+        <div><strong>2) Google / YouTube</strong></div>
+        <div style="margin-top:8px">
+          <button id="btnGoogleLogin">Login with Google</button>
+          <span id="googleStatus" class="muted" style="margin-left:12px">Not logged in</span>
+        </div>
+        <div style="margin-top:12px">
+          <label class="muted">New YouTube playlist name</label><br>
+          <input id="ytTitle" placeholder="Copy of My Spotify Playlist" style="width:100%;padding:8px;border-radius:6px;border:1px solid #12324a;background:#071421;color:#dff" />
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <button id="btnTransfer">Start Transfer</button>
+      <div class="progress" id="progressWrap" style="display:none"><div class="bar" id="progressBar"></div></div>
+      <div id="statusBox" style="margin-top:10px"></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div><strong>Failures / notes</strong></div>
+      <div id="failList" style="margin-top:8px"></div>
+    </div>
+
+    <footer>
+      <div>Notes: This uses PKCE Authorization Code flows in-browser. If you encounter CORS errors during the token exchange, you'll need a tiny backend to proxy the token exchange. See top of file for setup steps.</div>
+    </footer>
+  </div>
+
+  <script>
+  // --------------------------- CONFIG: fill these ---------------------------
+  const CLIENT_ID_SPOTIFY = '21c97a2b42034ed384eb46ca65c7243f';
+  const CLIENT_ID_GOOGLE = '103207260568-4pllbrslqs76ef10fref2e0fblsqeff4.apps.googleusercontent.com';
+  const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect
+  // -------------------------------------------------------------------------
+
+  // Spotify & Google endpoints
+  const SPOTIFY_AUTHORIZE = 'https://accounts.spotify.com/authorize';
+  const SPOTIFY_TOKEN = 'https://accounts.spotify.com/api/token';
+  const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
+  const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
+
+  // Scopes
+  const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative';
+  const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/youtube';
+
+  // Helpers -----------------------------------------------------------------
+  function base64urlencode(str) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(str)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function sha256(plain) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(plain);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return new Uint8Array(hash);
+  }
+
+  function randStr(length=43){
+    const arr = new Uint8Array(length);
+    crypto.getRandomValues(arr);
+    return Array.from(arr).map(n => (n%36).toString(36)).join('');
+  }
+
+  async function generatePKCECodes(){
+    const verifier = randStr(64);
+    const hashed = await sha256(verifier);
+    const challenge = base64urlencode(hashed);
+    return { verifier, challenge };
+  }
+
+  function saveSession(key, val){ sessionStorage.setItem(key, JSON.stringify(val)); }
+  function loadSession(key){ const v = sessionStorage.getItem(key); return v ? JSON.parse(v) : null; }
+
+  // UI refs
+  const btnSpotifyLogin = document.getElementById('btnSpotifyLogin');
+  const btnGoogleLogin = document.getElementById('btnGoogleLogin');
+  const playlistSelect = document.getElementById('playlistSelect');
+  const spotifyStatus = document.getElementById('spotifyStatus');
+  const googleStatus = document.getElementById('googleStatus');
+  const btnTransfer = document.getElementById('btnTransfer');
+  const ytTitle = document.getElementById('ytTitle');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar = document.getElementById('progressBar');
+  const statusBox = document.getElementById('statusBox');
+  const failList = document.getElementById('failList');
+
+  // On load: check if redirected back with code
+  (async function handleRedirect(){
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const stored = loadSession('oauth_state');
+    if(code && state && stored && stored[state]){
+      const entry = stored[state];
+      // state object describes which provider: 'spotify' or 'google'
+      if(entry.provider === 'spotify'){
+        // exchange code for token
+        try{
+          const token = await exchangeSpotifyCode(code, entry.code_verifier);
+          saveSession('spotify_token', token);
+          spotifyStatus.textContent = 'Logged in ✓';
+          await loadSpotifyPlaylists();
+        }catch(err){
+          console.error(err);
+          spotifyStatus.textContent = 'Spotify token exchange failed (check console)';
+        }
+      } else if(entry.provider === 'google'){
+        try{
+          const token = await exchangeGoogleCode(code, entry.code_verifier);
+          saveSession('google_token', token);
+          googleStatus.textContent = 'Logged in ✓';
+        }catch(err){
+          console.error(err);
+          googleStatus.textContent = 'Google token exchange failed (check console)';
+        }
+      }
+      // clear query params for cleanliness
+      url.searchParams.delete('code');
+      url.searchParams.delete('state');
+      window.history.replaceState({}, document.title, url.pathname);
+    } else {
+      // on normal load, if tokens in session show statuses
+      const sp = loadSession('spotify_token');
+      const gd = loadSession('google_token');
+      if(sp) spotifyStatus.textContent = 'Logged in ✓';
+      if(gd) googleStatus.textContent = 'Logged in ✓';
+      if(sp) loadSpotifyPlaylists();
+    }
+  })();
+
+  // ---------------- SPOTIFY: authorize & token exchange --------------------
+  btnSpotifyLogin.addEventListener('click', async ()=>{
+    const { verifier, challenge } = await generatePKCECodes();
+    const state = randStr(12);
+    const key = { provider: 'spotify', code_verifier: verifier };
+    const store = loadSession('oauth_state') || {};
+    store[state] = key; saveSession('oauth_state', store);
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: CLIENT_ID_SPOTIFY,
+      scope: SPOTIFY_SCOPES,
+      redirect_uri: REDIRECT_URI,
+      code_challenge_method: 'S256',
+      code_challenge: challenge,
+      state
+    });
+    window.location = SPOTIFY_AUTHORIZE + '?' + params.toString();
+  });
+
+  async function exchangeSpotifyCode(code, code_verifier){
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code, redirect_uri: REDIRECT_URI,
+      client_id: CLIENT_ID_SPOTIFY,
+      code_verifier
+    });
+    const res = await fetch(SPOTIFY_TOKEN, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+    if(!res.ok) throw new Error('Spotify token exchange failed: '+await res.text());
+    return await res.json();
+  }
+
+  async function loadSpotifyPlaylists(){
+    const token = loadSession('spotify_token');
+    if(!token) return;
+    const res = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', { headers: { Authorization: 'Bearer ' + token.access_token } });
+    if(!res.ok){ console.error('failed to fetch playlists', await res.text()); return; }
+    const data = await res.json();
+    playlistSelect.innerHTML = '';
+    data.items.forEach(pl => {
+      const opt = document.createElement('option');
+      opt.value = pl.id; opt.textContent = pl.name + ' ('+pl.tracks.total+' tracks)';
+      playlistSelect.appendChild(opt);
+    });
+  }
+
+  // ---------------- GOOGLE: authorize & token exchange --------------------
+  btnGoogleLogin.addEventListener('click', async ()=>{
+    const { verifier, challenge } = await generatePKCECodes();
+    const state = randStr(12);
+    const key = { provider: 'google', code_verifier: verifier };
+    const store = loadSession('oauth_state') || {};
+    store[state] = key; saveSession('oauth_state', store);
+
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID_GOOGLE,
+      response_type: 'code',
+      scope: GOOGLE_SCOPES,
+      redirect_uri: REDIRECT_URI,
+      access_type: 'offline',
+      include_granted_scopes: 'true',
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256'
+    });
+    window.location = GOOGLE_AUTHORIZE + '?' + params.toString();
+  });
+
+  async function exchangeGoogleCode(code, code_verifier){
+    const body = new URLSearchParams({ code, client_id: CLIENT_ID_GOOGLE, code_verifier, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI });
+    const res = await fetch(GOOGLE_TOKEN, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+    if(!res.ok) throw new Error('Google token exchange failed: '+await res.text());
+    return await res.json();
+  }
+
+  // ---------------- TRANSFER LOGIC ----------------------------------------
+  btnTransfer.addEventListener('click', async ()=>{
+    clearStatus();
+    const spToken = loadSession('spotify_token');
+    const gdToken = loadSession('google_token');
+    const plId = playlistSelect.value;
+    if(!spToken) return alert('Login to Spotify first');
+    if(!plId) return alert('Pick a Spotify playlist');
+    if(!gdToken) return alert('Login to Google first');
+
+    try{
+      // fetch tracks (simple pagination)
+      const tracks = await fetchAllSpotifyTracks(plId, spToken.access_token);
+      if(!tracks.length) return alert('Playlist empty or could not fetch tracks');
+      ytTitle.value = ytTitle.value || 'Copy of '+(playlistSelect.options[playlistSelect.selectedIndex].text || 'Spotify playlist');
+
+      // create YouTube playlist
+      const playlist = await createYouTubePlaylist(gdToken.access_token, ytTitle.value, 'Transferred from Spotify');
+      const youtubePlaylistId = playlist.id;
+      statusBox.innerHTML = `<div class="ok">Created YouTube playlist — <a class="link" target="_blank" href="https://www.youtube.com/playlist?list=${youtubePlaylistId}">Open playlist</a></div>`;
+
+      // iterate tracks and add
+      progressWrap.style.display = 'block'; progressBar.style.width = '0%';
+      const failures = [];
+      for(let i=0;i<tracks.length;i++){
+        const t = tracks[i];
+        const q = buildQuery(t);
+        // search
+        const vid = await searchYouTubeVideo(gdToken.access_token, q);
+        if(vid){
+          await addVideoToPlaylist(gdToken.access_token, youtubePlaylistId, vid);
+          updateProgress(i+1, tracks.length);
+        } else {
+          failures.push({ track: t, reason: 'No match' });
+          updateProgress(i+1, tracks.length);
+        }
+      }
+
+      // show failures
+      if(failures.length){
+        failList.innerHTML = '';
+        failures.forEach(f=>{
+          const d = document.createElement('div'); d.className='fail';
+          d.innerHTML = `<strong>${f.track.name}</strong> — ${f.track.artists.join(', ')}<br>${f.reason}`;
+          failList.appendChild(d);
+        });
+        statusBox.innerHTML += `<div class="fail">${failures.length} tracks failed to match. You can search them manually on YouTube Music.</div>`;
+      } else {
+        statusBox.innerHTML += `<div class="ok">All tracks transferred (or matched to top results).</div>`;
+      }
+
+    }catch(err){
+      console.error(err); alert('Transfer failed — check console');
+    }
+  });
+
+  function clearStatus(){ statusBox.innerHTML=''; failList.innerHTML=''; }
+
+  async function fetchAllSpotifyTracks(playlistId, access_token){
+    let items = [];
+    let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+    while(url){
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + access_token } });
+      if(!res.ok){ console.error('spotify tracks fetch failed', await res.text()); break; }
+      const data = await res.json();
+      data.items.forEach(it=>{
+        if(it.track && it.track.id){
+          items.push({ id: it.track.id, name: it.track.name, artists: it.track.artists.map(a=>a.name), duration_ms: it.track.duration_ms });
+        }
+      });
+      url = data.next;
+    }
+    return items;
+  }
+
+  function buildQuery(track){
+    // minimal normalization: strip parentheses contents and extras
+    let title = track.name.replace(/\(.*?\)/g,'').replace(/\[.*?\]/g,'').trim();
+    const artist = track.artists[0] || '';
+    // prefer 'official audio' to get the right upload
+    return `${artist} - ${title} official audio`;
+  }
+
+  async function createYouTubePlaylist(access_token, title, description){
+    const url = 'https://www.googleapis.com/youtube/v3/playlists?part=snippet%2Cstatus';
+    const body = { snippet: { title, description }, status: { privacyStatus: 'private' } };
+    const res = await fetch(url, { method:'POST', headers:{ Authorization:'Bearer '+access_token, 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    if(!res.ok) throw new Error('YT create playlist failed: '+await res.text());
+    return await res.json();
+  }
+
+  async function searchYouTubeVideo(access_token, q){
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { Authorization:'Bearer '+access_token } });
+    if(!res.ok){ console.error('YT search failed', await res.text()); return null; }
+    const data = await res.json();
+    if(data.items && data.items.length) return data.items[0].id.videoId;
+    return null;
+  }
+
+  async function addVideoToPlaylist(access_token, playlistId, videoId){
+    const url = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet';
+    const body = { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } };
+    const res = await fetch(url, { method: 'POST', headers:{ Authorization:'Bearer '+access_token, 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    if(!res.ok){ throw new Error('YT add failed: '+await res.text()); }
+    return await res.json();
+  }
+
+  function updateProgress(done, total){
+    const pct = Math.round((done/total)*100);
+    progressBar.style.width = pct + '%';
+    statusBox.innerHTML = `<div class="muted">Transferring... (${done}/${total})</div>`;
+  }
+
+  </script>
+</body>
+</html>
