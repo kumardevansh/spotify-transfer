@@ -2,26 +2,17 @@
 <!--
 spot-mini: Single-file Spotify -> YouTube Music transfer (frontend + backend token exchange)
 
-This variant of the mini frontend expects a small secure backend endpoint to exchange Google OAuth codes
-for tokens (so your CLIENT_SECRET stays on the server). The frontend will call BACKEND_EXCHANGE to
-perform the token exchange.
+This file is the frontend. It expects a backend endpoint at /api/exchange_google which exchanges
+Google OAuth codes to tokens (server holds CLIENT_SECRET). See the repository notes / assistant
+messages for the server function to deploy on Vercel or any host.
 
-REQUIRED SERVER
-- Implement an endpoint at /api/exchange_google which accepts POST JSON { code, code_verifier }
-  and returns Google's token response (access_token, refresh_token, expires_in, id_token, ...).
-  Example server implementations were provided previously (Vercel serverless or Express server).
+Usage:
+- Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below.
+- Deploy backend (Vercel serverless or Express) and set BACKEND_EXCHANGE to its full URL if different.
+- Ensure REDIRECT_URI is registered in both Spotify and Google OAuth settings and matches this page URL.
 
-INSTRUCTIONS (summary)
-1) Deploy a backend endpoint (recommended: Vercel serverless at /api/exchange_google or an Express server).
-   - Set env vars on the server: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI
-   - REDIRECT_URI must EXACTLY match the frontend REDIRECT_URI below and the value registered in GCP.
-2) Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below in the frontend.
-3) Update BACKEND_EXCHANGE below if your backend is at a different URL.
-4) Deploy frontend (Vercel / Netlify / GitHub Pages). Update OAuth redirect URIs in Spotify & Google to
-   the deployed URL (or use http://localhost:8000/ for local dev + local server).
-
-SECURITY
-- Do not commit GOOGLE_CLIENT_SECRET. Keep it only on the server as an environment variable.
+Security:
+- Do not store GOOGLE_CLIENT_SECRET in frontend. Keep it server-side only.
 
 -->
 <html lang="en">
@@ -46,12 +37,13 @@ SECURITY
     a.link{color:#7ee7ff;text-decoration:underline}
     footer{margin-top:18px;color:#6f8fb0;font-size:13px}
     textarea{width:100%;height:90px;background:#071421;border:1px solid #12324a;color:#cfeff6;padding:8px;border-radius:6px}
+    .small{font-size:12px;color:#9fb3d3}
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Spot → YouTube Music (mini)</h1>
-    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session; Google exchange happens through your backend.</p>
+    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session; Google exchange happens via your backend.</p>
 
     <div class="row">
       <div class="col">
@@ -99,7 +91,7 @@ SECURITY
   // --------------------------- CONFIG: fill these ---------------------------
   const CLIENT_ID_SPOTIFY = '21c97a2b42034ed384eb46ca65c7243f';
   const CLIENT_ID_GOOGLE = '103207260568-4pllbrslqs76ef10fref2e0fblsqeff4.apps.googleusercontent.com';
-  const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect
+  const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect exactly
   // Backend exchange endpoint (change if your server uses a different path)
   const BACKEND_EXCHANGE = window.location.origin + '/api/exchange_google';
   // -------------------------------------------------------------------------
@@ -282,7 +274,71 @@ SECURITY
     return await res.json();
   }
 
-  // ---------------- TRANSFER LOGIC ----------------------------------------
+  // ---------------- Robust transfer: retries, backoff, resume ----------------
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  async function addVideoToPlaylistWithRetry(access_token, playlistId, videoId, opts={}) {
+    const maxAttempts = opts.maxAttempts || 6;
+    const baseDelay = opts.baseDelay || 400; // ms
+    const maxDelay = opts.maxDelay || 8000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const url = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet';
+        const body = { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } };
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+          return await res.json();
+        }
+
+        let errorBody;
+        try { errorBody = await res.json(); } catch(e){ errorBody = { raw: await res.text() }; }
+
+        if (res.status === 409 && errorBody?.error?.errors?.[0]?.reason === 'playlistItemDuplicate') {
+          console.warn('Video already in playlist (duplicate) - skipping:', videoId);
+          return { skippedDuplicate: true };
+        }
+
+        const transientStatus = res.status >= 500 || res.status === 429 || (errorBody?.error?.status === 'ABORTED') || (errorBody?.error?.errors?.[0]?.reason === 'SERVICE_UNAVAILABLE');
+        if (!transientStatus) {
+          console.error('YT add permanent error', res.status, errorBody);
+          throw new Error('YT add failed: ' + JSON.stringify(errorBody));
+        }
+
+        const jitter = Math.floor(Math.random() * 300);
+        const delay = Math.min(baseDelay * Math.pow(2, attempt - 1) + jitter, maxDelay);
+        console.warn(`Transient YT error (attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms`, errorBody);
+        await sleep(delay);
+        continue;
+
+      } catch (err) {
+        if (attempt === maxAttempts) {
+          console.error('addVideoToPlaylistWithRetry final error', err);
+          throw err;
+        }
+        const jitter = Math.floor(Math.random() * 300);
+        const delay = Math.min(400 * Math.pow(2, attempt - 1) + jitter, 8000);
+        console.warn(`Network error adding video (attempt ${attempt}). Retrying in ${delay}ms`, err);
+        await sleep(delay);
+      }
+    }
+
+    throw new Error('Failed to add video after retries: ' + videoId);
+  }
+
+  function updateProgressAndSave(done, total, playlistId){
+    const pct = Math.round((done/total)*100);
+    progressBar.style.width = pct + '%';
+    statusBox.innerHTML = `<div class="muted">Transferring... (${done}/${total})</div>`;
+    sessionStorage.setItem('transfer_progress', JSON.stringify({ playlistId, done, total, timestamp: Date.now() }));
+  }
+
+  // ---------------- TRANSFER LOGIC (improved) ------------------------------
   btnTransfer.addEventListener('click', async ()=>{
     clearStatus();
     const spToken = loadSession('spotify_token');
@@ -293,34 +349,53 @@ SECURITY
     if(!gdToken) return alert('Login to Google first');
 
     try{
-      // fetch tracks (simple pagination)
       const tracks = await fetchAllSpotifyTracks(plId, spToken.access_token);
       if(!tracks.length) return alert('Playlist empty or could not fetch tracks');
       ytTitle.value = ytTitle.value || 'Copy of '+(playlistSelect.options[playlistSelect.selectedIndex].text || 'Spotify playlist');
 
-      // create YouTube playlist
       const playlist = await createYouTubePlaylist(gdToken.access_token, ytTitle.value, 'Transferred from Spotify');
       const youtubePlaylistId = playlist.id;
       statusBox.innerHTML = `<div class="ok">Created YouTube playlist — <a class="link" target="_blank" href="https://www.youtube.com/playlist?list=${youtubePlaylistId}">Open playlist</a></div>`;
 
-      // iterate tracks and add
       progressWrap.style.display = 'block'; progressBar.style.width = '0%';
-      const failures = [];
-      for(let i=0;i<tracks.length;i++){
-        const t = tracks[i];
-        const q = buildQuery(t);
-        // search
-        const vid = await searchYouTubeVideo(gdToken.access_token, q);
-        if(vid){
-          await addVideoToPlaylist(gdToken.access_token, youtubePlaylistId, vid);
-          updateProgress(i+1, tracks.length);
-        } else {
-          failures.push({ track: t, reason: 'No match' });
-          updateProgress(i+1, tracks.length);
-        }
+
+      let startIndex = 0;
+      const persisted = sessionStorage.getItem('transfer_progress');
+      if (persisted) {
+        try {
+          const p = JSON.parse(persisted);
+          if (p && p.playlistId === plId && p.total === tracks.length) {
+            startIndex = p.done;
+            console.info('Resuming transfer from index', startIndex);
+          }
+        } catch(e){}
       }
 
-      // show failures
+      const failures = [];
+      const delayBetween = 300; // ms between adds
+
+      for (let i = startIndex; i < tracks.length; i++){
+        const t = tracks[i];
+        const q = buildQuery(t);
+        const vid = await searchYouTubeVideo(gdToken.access_token, q);
+        if(vid){
+          try{
+            await addVideoToPlaylistWithRetry(gdToken.access_token, youtubePlaylistId, vid, { maxAttempts: 6, baseDelay: 400 });
+            updateProgressAndSave(i+1, tracks.length, plId);
+          }catch(err){
+            console.error('Failed to add video after retries', { track: t, err });
+            failures.push({ track: t, reason: err.message || 'Add failed' });
+            updateProgressAndSave(i+1, tracks.length, plId);
+          }
+        } else {
+          failures.push({ track: t, reason: 'No match' });
+          updateProgressAndSave(i+1, tracks.length, plId);
+        }
+        await sleep(delayBetween);
+      }
+
+      sessionStorage.removeItem('transfer_progress');
+
       if(failures.length){
         failList.innerHTML = '';
         failures.forEach(f=>{
@@ -328,7 +403,7 @@ SECURITY
           d.innerHTML = `<strong>${f.track.name}</strong> — ${f.track.artists.join(', ')}<br>${f.reason}`;
           failList.appendChild(d);
         });
-        statusBox.innerHTML += `<div class="fail">${failures.length} tracks failed to match. You can search them manually on YouTube Music.</div>`;
+        statusBox.innerHTML += `<div class="fail">${failures.length} tracks failed to match or add. You can retry or add them manually.</div>`;
       } else {
         statusBox.innerHTML += `<div class="ok">All tracks transferred (or matched to top results).</div>`;
       }
@@ -358,10 +433,8 @@ SECURITY
   }
 
   function buildQuery(track){
-    // minimal normalization: strip parentheses contents and extras
     let title = track.name.replace(/\(.*?\)/g,'').replace(/\[.*?\]/g,'').trim();
     const artist = track.artists[0] || '';
-    // prefer 'official audio' to get the right upload
     return `${artist} - ${title} official audio`;
   }
 
@@ -375,7 +448,7 @@ SECURITY
 
   async function searchYouTubeVideo(access_token, q){
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, { headers: { Authorization:'Bearer '+access_token } });
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + access_token } });
     if(!res.ok){ console.error('YT search failed', await res.text()); return null; }
     const data = await res.json();
     if(data.items && data.items.length) return data.items[0].id.videoId;
@@ -383,6 +456,7 @@ SECURITY
   }
 
   async function addVideoToPlaylist(access_token, playlistId, videoId){
+    // legacy single attempt add kept for compatibility if needed elsewhere
     const url = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet';
     const body = { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } };
     const res = await fetch(url, { method: 'POST', headers:{ Authorization:'Bearer '+access_token, 'Content-Type':'application/json' }, body: JSON.stringify(body) });
