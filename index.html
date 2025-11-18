@@ -1,19 +1,27 @@
 <!doctype html>
 <!--
-spot-mini: Single-file Spotify -> YouTube Music transfer (frontend-only, PKCE)
+spot-mini: Single-file Spotify -> YouTube Music transfer (frontend + backend token exchange)
 
-INSTRUCTIONS
-1) Register an app in Spotify Dashboard and get a CLIENT_ID. Set Redirect URI to the exact URL where you'll host this file (e.g. https://yourdomain.com/).
-   - Enable Authorization Code with PKCE usage in your flow.
-2) Create an OAuth client in Google Cloud Console. Add the same Redirect URI. Use OAuth consent screen (for private/testing you can keep users as Test users).
-   - Required Google OAuth scope used here: https://www.googleapis.com/auth/youtube
-3) Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below.
-4) Deploy this single file to GitHub Pages / Vercel / Netlify (must be served over HTTPS).
+This variant of the mini frontend expects a small secure backend endpoint to exchange Google OAuth codes
+for tokens (so your CLIENT_SECRET stays on the server). The frontend will call BACKEND_EXCHANGE to
+perform the token exchange.
 
-CAVEATS
-- This is the minimal, easiest frontend-only approach. Some providers may block direct token exchanges from browser due to CORS; if you see CORS errors, you'll need a tiny backend to proxy the token exchange.
-- Tokens are stored only in sessionStorage for the session. No refresh tokens are persisted.
-- Use for personal or small-user testing. For public apps you'd need Google verification and stricter security.
+REQUIRED SERVER
+- Implement an endpoint at /api/exchange_google which accepts POST JSON { code, code_verifier }
+  and returns Google's token response (access_token, refresh_token, expires_in, id_token, ...).
+  Example server implementations were provided previously (Vercel serverless or Express server).
+
+INSTRUCTIONS (summary)
+1) Deploy a backend endpoint (recommended: Vercel serverless at /api/exchange_google or an Express server).
+   - Set env vars on the server: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI
+   - REDIRECT_URI must EXACTLY match the frontend REDIRECT_URI below and the value registered in GCP.
+2) Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below in the frontend.
+3) Update BACKEND_EXCHANGE below if your backend is at a different URL.
+4) Deploy frontend (Vercel / Netlify / GitHub Pages). Update OAuth redirect URIs in Spotify & Google to
+   the deployed URL (or use http://localhost:8000/ for local dev + local server).
+
+SECURITY
+- Do not commit GOOGLE_CLIENT_SECRET. Keep it only on the server as an environment variable.
 
 -->
 <html lang="en">
@@ -43,7 +51,7 @@ CAVEATS
 <body>
   <div class="card">
     <h1>Spot → YouTube Music (mini)</h1>
-    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session.</p>
+    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session; Google exchange happens through your backend.</p>
 
     <div class="row">
       <div class="col">
@@ -83,7 +91,7 @@ CAVEATS
     </div>
 
     <footer>
-      <div>Notes: This uses PKCE Authorization Code flows in-browser. If you encounter CORS errors during the token exchange, you'll need a tiny backend to proxy the token exchange. See top of file for setup steps.</div>
+      <div>Notes: This uses PKCE Authorization Code flows. A small backend is required to exchange the Google code for tokens (so you can keep client_secret server-side). See top of file for setup steps.</div>
     </footer>
   </div>
 
@@ -92,6 +100,8 @@ CAVEATS
   const CLIENT_ID_SPOTIFY = '21c97a2b42034ed384eb46ca65c7243f';
   const CLIENT_ID_GOOGLE = '103207260568-4pllbrslqs76ef10fref2e0fblsqeff4.apps.googleusercontent.com';
   const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect
+  // Backend exchange endpoint (change if your server uses a different path)
+  const BACKEND_EXCHANGE = window.location.origin + '/api/exchange_google';
   // -------------------------------------------------------------------------
 
   // Spotify & Google endpoints
@@ -259,9 +269,16 @@ CAVEATS
   });
 
   async function exchangeGoogleCode(code, code_verifier){
-    const body = new URLSearchParams({ code, client_id: CLIENT_ID_GOOGLE, code_verifier, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI });
-    const res = await fetch(GOOGLE_TOKEN, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-    if(!res.ok) throw new Error('Google token exchange failed: '+await res.text());
+    // Call backend exchange endpoint which performs the token exchange with Google using CLIENT_SECRET
+    const res = await fetch(BACKEND_EXCHANGE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, code_verifier })
+    });
+    if(!res.ok){
+      const text = await res.text();
+      throw new Error('Google token exchange failed: '+text);
+    }
     return await res.json();
   }
 
