@@ -1,41 +1,68 @@
-// api/exchange_google.js  (Vercel Serverless function)
-const fetch = require('node-fetch');
+// api/exchange_google.js
+// Vercel serverless function using built-in fetch (Node 18+)
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { code, code_verifier } = req.body || {};
-  if (!code) return res.status(400).json({ error: 'missing code' });
-
-  const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-  const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-  const REDIRECT_URI = process.env.REDIRECT_URI; // must match the redirect URI you used in OAuth flow
-
+export default async function handler(req, res) {
   try {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST');
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const { code, code_verifier } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ error: 'missing code in request body' });
+    }
+
+    const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+    const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+    const REDIRECT_URI = process.env.REDIRECT_URI;
+
+    if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+      console.error("Missing env vars", {
+        CLIENT_ID: !!CLIENT_ID,
+        CLIENT_SECRET: !!CLIENT_SECRET,
+        REDIRECT_URI: !!REDIRECT_URI
+      });
+      return res.status(500).json({
+        error: "Server misconfiguration: missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / REDIRECT_URI"
+      });
+    }
+
     const params = new URLSearchParams({
       code,
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       redirect_uri: REDIRECT_URI,
-      grant_type: 'authorization_code',
-      code_verifier: code_verifier || ''
+      grant_type: "authorization_code",
+      ...(code_verifier ? { code_verifier } : {})
     });
 
-    const r = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    const googleRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
       body: params.toString()
     });
 
-    const data = await r.json();
-    if (!r.ok) {
-      console.error('Google token error', data);
-      return res.status(500).json({ error: data });
+    const googleData = await googleRes.json();
+
+    if (!googleRes.ok) {
+      console.error("Google token endpoint error", googleData);
+      return res.status(502).json({
+        error: "google_token_error",
+        details: googleData,
+        status: googleRes.status
+      });
     }
-    // return tokens (access_token, refresh_token, expires_in, id_token, etc.)
-    return res.status(200).json(data);
+
+    return res.status(200).json(googleData);
+
   } catch (err) {
-    console.error('exchange error', err);
-    return res.status(500).json({ error: err.message || err });
+    console.error("Exchange error:", err);
+    return res.status(500).json({
+      error: "internal_server_error",
+      message: err.message || String(err)
+    });
   }
-};
+}
