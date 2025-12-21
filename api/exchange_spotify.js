@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   }
 
   const origin = req.headers.origin || '';
-  if (!origin.includes('spotify-transfer-chi.vercel.app/')) {
+  if (!origin.includes('spotify-transfer-chi.vercel.app')) {
     return res.status(403).json({ error: 'Forbidden origin' });
   }
 
