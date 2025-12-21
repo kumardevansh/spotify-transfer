@@ -90,7 +90,8 @@ WHY THIS IS OK
   <!-- </div> -->
 
   <script>
-  // --------------------------- CONFIG: fill these ---------------------------
+  document.addEventListener('DOMContentLoaded', () =>{
+    // --------------------------- CONFIG: fill these ---------------------------
   // REDIRECT_URI is computed on the client but must match the value registered in Spotify & Google
   const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect exactly
   // Backend endpoints (change if your server exposes different paths)
@@ -399,7 +400,10 @@ WHY THIS IS OK
     }
   });
 
-  function clearStatus(){ statusBox.innerHTML=''; failList.innerHTML=''; }
+  function clearStatus() {
+  if (statusBox) statusBox.innerHTML = '';
+  if (failList) failList.innerHTML = '';
+}
 
   async function fetchAllSpotifyTracks(playlistId, access_token){
     let items = [];
@@ -454,6 +458,7 @@ WHY THIS IS OK
     progressBar.style.width = pct + '%';
     statusBox.innerHTML = `<div class="muted">Transferring... (${done}/${total})</div>`;
   }
+  });
 
   </script>
 </body>
