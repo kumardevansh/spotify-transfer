@@ -30,7 +30,9 @@ WHY THIS IS OK
     p{margin:0 0 16px;color:#9fb3d3}
     .row{display:flex;gap:12px;flex-wrap:wrap}
     button{background:#1f6feb;border:none;padding:10px 14px;border-radius:8px;color:white;cursor:pointer}
-    select,button,input{font-size:14px}
+    select, button, input {
+      font-size: 14px;
+    }
     .muted{color:#7e9ab5;font-size:13px}
     .col{flex:1;min-width:220px}
     .progress{height:14px;background:#0b1220;border-radius:8px;overflow:hidden;margin-top:10px}
@@ -48,6 +50,57 @@ WHY THIS IS OK
 
     a:hover {
       text-decoration: underline;
+
+    /* ---------- Custom Select Styling ---------- */
+    select {
+      width: 100%;
+      padding: 8px 36px 8px 10px;
+      background-color: #071421;
+      color: #e6eef8;
+      border: 1px solid #12324a;
+      border-radius: 6px;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      cursor: pointer;
+    }
+
+    select:hover {
+      border-color: #1f6feb;
+    }
+
+    select:focus {
+      border-color: #1f6feb;
+      box-shadow: 0 0 0 1px rgba(31, 111, 235, 0.4);
+    }
+
+    /* Dropdown options */
+    select option {
+      background-color: #071421;
+      color: #e6eef8;
+    }
+
+    /* Disabled placeholder option */
+    select option[value=""] {
+      color: #7e9ab5;
+    }
+
+    /* Custom arrow */
+    select {
+      background-image:
+        linear-gradient(45deg, transparent 50%, #7e9ab5 50%),
+        linear-gradient(135deg, #7e9ab5 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) 50%,
+        calc(100% - 12px) 50%;
+      background-size:
+        6px 6px,
+        6px 6px;
+      background-repeat: no-repeat;
+    }
+
+
     }
   </style>
 </head>
@@ -59,7 +112,7 @@ WHY THIS IS OK
       The transfer is automated and may not always be accurate.
     </p>
     <div class="row">
-      <div class="col">
+      <!-- <div class="col">
         <div><strong>1) Spotify</strong></div>
         <div style="margin-top:8px">
           <button id="btnSpotifyLogin">Login with Spotify</button>
@@ -69,10 +122,10 @@ WHY THIS IS OK
           <label class="muted">Choose playlist</label><br>
           <select id="playlistSelect"><option value="">(login to load)</option></select>
         </div>
-      </div>
+      </div> -->
 
       <div class="col">
-        <div><strong>2) Google / YouTube</strong></div>
+        <div><strong>1) Google / YouTube</strong></div>
         <div style="margin-top:8px">
           <button id="btnGoogleLogin">Login with Google</button>
           <span id="googleStatus" class="muted" style="margin-left:12px">Not logged in</span>
@@ -80,6 +133,18 @@ WHY THIS IS OK
         <div style="margin-top:12px">
           <label class="muted">New YouTube playlist name</label><br>
           <input id="ytTitle" placeholder="Copy of My Spotify Playlist" style="width:100%;padding:8px;border-radius:6px;border:1px solid #12324a;background:#071421;color:#dff" />
+        </div>
+      </div>
+
+      <div class="col">
+        <div><strong>2) Spotify</strong></div>
+        <div style="margin-top:8px">
+          <button id="btnSpotifyLogin">Login with Spotify</button>
+          <span id="spotifyStatus" class="muted" style="margin-left:12px">Not logged in</span>
+        </div>
+        <div style="margin-top:12px">
+          <label class="muted">Choose playlist</label><br>
+          <select id="playlistSelect"><option value="">(login to load)</option></select>
         </div>
       </div>
     </div>
