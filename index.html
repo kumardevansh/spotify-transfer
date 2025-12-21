@@ -54,8 +54,10 @@ WHY THIS IS OK
 <body>
   <div class="card">
     <h1>Spotify to YouTube Music Transfer</h1>
-    <p class="muted">Minimal transfer tool. OAuth client IDs are kept on the server — the frontend redirects to server endpoints which start the OAuth flows.</p>
-
+    <p class="muted">Minimal tool to transfer Spotify playlists to YouTube Music.
+      Login to both services, pick a Spotify playlist, and start the transfer.
+      The transfer is automated and may not always be accurate.
+    </p>
     <div class="row">
       <div class="col">
         <div><strong>1) Spotify</strong></div>
@@ -88,10 +90,10 @@ WHY THIS IS OK
       <div id="statusBox" style="margin-top:10px"></div>
     </div>
 
-    <div style="margin-top:14px">
+    <!-- <div style="margin-top:14px">
       <div><strong>Failures / notes</strong></div>
       <div id="failList" style="margin-top:8px"></div>
-    </div> 
+    </div>  -->
 
     <footer>
       <!-- <div>Notes: This frontend no longer contains client IDs. You must deploy two small server endpoints: /api/auth_spotify and /api/auth_google which redirect the user to each provider's authorize URL (server uses env vars with client IDs and PKCE challenge). The server must also provide /api/exchange_google to exchange Google code for tokens.</div> -->
