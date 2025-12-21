@@ -1,18 +1,20 @@
 <!doctype html>
 <!--
-spot-mini: Single-file Spotify -> YouTube Music transfer (frontend + backend token exchange)
+spot-mini: Frontend that avoids embedding OAuth client IDs
 
-This file is the frontend. It expects a backend endpoint at /api/exchange_google which exchanges
-Google OAuth codes to tokens (server holds CLIENT_SECRET). See the repository notes / assistant
-messages for the server function to deploy on Vercel or any host.
+CHANGELOG
+- This version removes CLIENT_IDs from the frontend. Instead the frontend redirects the user
+  to backend endpoints that start the OAuth flow (so client IDs live only on the server).
 
-Usage:
-- Fill CLIENT_ID_SPOTIFY and CLIENT_ID_GOOGLE below.
-- Deploy backend (Vercel serverless or Express) and set BACKEND_EXCHANGE to its full URL if different.
-- Ensure REDIRECT_URI is registered in both Spotify and Google OAuth settings and matches this page URL.
+REQUIREMENTS
+- You must deploy two simple backend endpoints that redirect to the provider auth URL:
+  - /api/auth_spotify -> redirects to Spotify authorize URL (server uses CLIENT_ID_SPOTIFY env var)
+  - /api/auth_google  -> redirects to Google authorize URL (server uses CLIENT_ID_GOOGLE env var)
+- The existing backend token exchange endpoint at /api/exchange_google remains required.
 
-Security:
-- Do not store GOOGLE_CLIENT_SECRET in frontend. Keep it server-side only.
+WHY THIS IS OK
+- Client IDs are public by design and not secret. Still, some people prefer not to embed even client IDs
+  in distributed static HTML; this moves those IDs to the server.
 
 -->
 <html lang="en">
@@ -43,7 +45,7 @@ Security:
 <body>
   <div class="card">
     <h1>Spot → YouTube Music (mini)</h1>
-    <p class="muted">Super minimal. Login to Spotify, pick one playlist, login to Google, then transfer. Tokens live only in your browser session; Google exchange happens via your backend.</p>
+    <p class="muted">Minimal transfer tool. OAuth client IDs are kept on the server — the frontend redirects to server endpoints which start the OAuth flows.</p>
 
     <div class="row">
       <div class="col">
@@ -83,20 +85,21 @@ Security:
     </div>
 
     <footer>
-      <div>Notes: This uses PKCE Authorization Code flows. A small backend is required to exchange the Google code for tokens (so you can keep client_secret server-side). See top of file for setup steps.</div>
+      <div>Notes: This frontend no longer contains client IDs. You must deploy two small server endpoints: /api/auth_spotify and /api/auth_google which redirect the user to each provider's authorize URL (server uses env vars with client IDs and PKCE challenge). The server must also provide /api/exchange_google to exchange Google code for tokens.</div>
     </footer>
   </div>
 
   <script>
   // --------------------------- CONFIG: fill these ---------------------------
-  const CLIENT_ID_SPOTIFY = '21c97a2b42034ed384eb46ca65c7243f';
-  const CLIENT_ID_GOOGLE = '103207260568-4pllbrslqs76ef10fref2e0fblsqeff4.apps.googleusercontent.com';
+  // REDIRECT_URI is computed on the client but must match the value registered in Spotify & Google
   const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect exactly
-  // Backend exchange endpoint (change if your server uses a different path)
+  // Backend endpoints (change if your server exposes different paths)
+  const BACKEND_AUTH_SPOTIFY = window.location.origin + '/api/auth_spotify';
+  const BACKEND_AUTH_GOOGLE = window.location.origin + '/api/auth_google';
   const BACKEND_EXCHANGE = window.location.origin + '/api/exchange_google';
   // -------------------------------------------------------------------------
 
-  // Spotify & Google endpoints
+  // Spotify & Google endpoints (used only for comments / fallback checks)
   const SPOTIFY_AUTHORIZE = 'https://accounts.spotify.com/authorize';
   const SPOTIFY_TOKEN = 'https://accounts.spotify.com/api/token';
   const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -156,9 +159,7 @@ Security:
     const stored = loadSession('oauth_state');
     if(code && state && stored && stored[state]){
       const entry = stored[state];
-      // state object describes which provider: 'spotify' or 'google'
       if(entry.provider === 'spotify'){
-        // exchange code for token
         try{
           const token = await exchangeSpotifyCode(code, entry.code_verifier);
           saveSession('spotify_token', token);
@@ -178,12 +179,10 @@ Security:
           googleStatus.textContent = 'Google token exchange failed (check console)';
         }
       }
-      // clear query params for cleanliness
       url.searchParams.delete('code');
       url.searchParams.delete('state');
       window.history.replaceState({}, document.title, url.pathname);
     } else {
-      // on normal load, if tokens in session show statuses
       const sp = loadSession('spotify_token');
       const gd = loadSession('google_token');
       if(sp) spotifyStatus.textContent = 'Logged in ✓';
@@ -192,31 +191,26 @@ Security:
     }
   })();
 
-  // ---------------- SPOTIFY: authorize & token exchange --------------------
+  // ---------------- SPOTIFY: start auth (server redirect) ------------------
   btnSpotifyLogin.addEventListener('click', async ()=>{
+    // generate PKCE in frontend and store verifier, then call server to redirect user
     const { verifier, challenge } = await generatePKCECodes();
     const state = randStr(12);
     const key = { provider: 'spotify', code_verifier: verifier };
     const store = loadSession('oauth_state') || {};
     store[state] = key; saveSession('oauth_state', store);
 
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: CLIENT_ID_SPOTIFY,
-      scope: SPOTIFY_SCOPES,
-      redirect_uri: REDIRECT_URI,
-      code_challenge_method: 'S256',
-      code_challenge: challenge,
-      state
-    });
-    window.location = SPOTIFY_AUTHORIZE + '?' + params.toString();
+    // redirect to backend which uses CLIENT_ID from env and performs the redirect to Spotify
+    // server should accept query params: state & code_challenge & redirect_uri & scope & response_type
+    const params = new URLSearchParams({ state, code_challenge: challenge, code_challenge_method: 'S256', redirect_uri: REDIRECT_URI, scope: SPOTIFY_SCOPES, response_type: 'code' });
+    window.location = BACKEND_AUTH_SPOTIFY + '?' + params.toString();
   });
 
   async function exchangeSpotifyCode(code, code_verifier){
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code, redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID_SPOTIFY,
+      client_id: '', // client_id handled server-side for auth; exchange stays client-side (Spotify allows PKCE without secret)
       code_verifier
     });
     const res = await fetch(SPOTIFY_TOKEN, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
@@ -238,7 +232,7 @@ Security:
     });
   }
 
-  // ---------------- GOOGLE: authorize & token exchange --------------------
+  // ---------------- GOOGLE: start auth (server redirect) ------------------
   btnGoogleLogin.addEventListener('click', async ()=>{
     const { verifier, challenge } = await generatePKCECodes();
     const state = randStr(12);
@@ -246,22 +240,12 @@ Security:
     const store = loadSession('oauth_state') || {};
     store[state] = key; saveSession('oauth_state', store);
 
-    const params = new URLSearchParams({
-      client_id: CLIENT_ID_GOOGLE,
-      response_type: 'code',
-      scope: GOOGLE_SCOPES,
-      redirect_uri: REDIRECT_URI,
-      access_type: 'offline',
-      include_granted_scopes: 'true',
-      state,
-      code_challenge: challenge,
-      code_challenge_method: 'S256'
-    });
-    window.location = GOOGLE_AUTHORIZE + '?' + params.toString();
+    // server will use client_id from env and redirect to Google
+    const params = new URLSearchParams({ state, code_challenge: challenge, code_challenge_method: 'S256', redirect_uri: REDIRECT_URI, scope: GOOGLE_SCOPES, response_type: 'code', access_type: 'offline', include_granted_scopes: 'true' });
+    window.location = BACKEND_AUTH_GOOGLE + '?' + params.toString();
   });
 
   async function exchangeGoogleCode(code, code_verifier){
-    // Call backend exchange endpoint which performs the token exchange with Google using CLIENT_SECRET
     const res = await fetch(BACKEND_EXCHANGE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -456,7 +440,6 @@ Security:
   }
 
   async function addVideoToPlaylist(access_token, playlistId, videoId){
-    // legacy single attempt add kept for compatibility if needed elsewhere
     const url = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet';
     const body = { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } };
     const res = await fetch(url, { method: 'POST', headers:{ Authorization:'Bearer '+access_token, 'Content-Type':'application/json' }, body: JSON.stringify(body) });
