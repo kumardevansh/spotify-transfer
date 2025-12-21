@@ -125,6 +125,33 @@ WHY THIS IS OK
       background-color: #1f6feb;
       color: white;
     }
+    /* =========================
+   Playlist scrollbar fix
+   ========================= */
+
+    select#playlistSelect {
+      scrollbar-width: thin;                 /* Firefox */
+      scrollbar-color: #12324a #071421;       /* Firefox */
+    }
+
+    /* Chrome / Edge / Brave */
+    select#playlistSelect::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    select#playlistSelect::-webkit-scrollbar-track {
+      background: #071421;
+    }
+
+    select#playlistSelect::-webkit-scrollbar-thumb {
+      background-color: #12324a;
+      border-radius: 6px;
+      border: 2px solid #071421;
+    }
+
+    select#playlistSelect::-webkit-scrollbar-thumb:hover {
+      background-color: #1f6feb;
+    }
 
   </style>
 </head>
