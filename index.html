@@ -207,16 +207,18 @@ WHY THIS IS OK
   });
 
   async function exchangeSpotifyCode(code, code_verifier){
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code, redirect_uri: REDIRECT_URI,
-      client_id: '', // client_id handled server-side for auth; exchange stays client-side (Spotify allows PKCE without secret)
-      code_verifier
-    });
-    const res = await fetch(SPOTIFY_TOKEN, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-    if(!res.ok) throw new Error('Spotify token exchange failed: '+await res.text());
-    return await res.json();
+  const res = await fetch('/api/exchange_spotify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, code_verifier })
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text());
   }
+  return await res.json();
+}
+
 
   async function loadSpotifyPlaylists(){
     const token = loadSession('spotify_token');
