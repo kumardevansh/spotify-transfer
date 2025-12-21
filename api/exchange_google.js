@@ -8,6 +8,34 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    const origin = req.headers.origin || '';
+    if (!origin.includes('your-app.vercel.app')) {
+      return res.status(403).json({ error: 'Forbidden origin' });
+    }
+
+    if (!req.headers['content-type']?.includes('application/json')) {
+      return res.status(400).json({ error: 'Invalid content type' });
+    }
+
+    const ip =
+      (req.headers['x-forwarded-for'] || '').split(',')[0] || 'unknown';
+
+    global.rateLimit = global.rateLimit || new Map();
+
+    const now = Date.now();
+    const windowMs = 60_000;
+    const maxRequests = 10;
+
+    const timestamps = global.rateLimit.get(ip) || [];
+    const recent = timestamps.filter(t => now - t < windowMs);
+
+    if (recent.length >= maxRequests) {
+      return res.status(429).json({ error: 'Too many requests' });
+    }
+
+    recent.push(now);
+    global.rateLimit.set(ip, recent);
+
     const { code, code_verifier } = req.body || {};
     if (!code) {
       return res.status(400).json({ error: 'missing code in request body' });
