@@ -36,6 +36,32 @@ OAuth token exchange is handled via secure backend endpoints.
 
 ---
 
+## Spotify API Limitation
+
+Due to recent changes in Spotify’s developer platform (2025), apps created by
+individual developers operate in **development mode** by default.
+
+In this mode:
+- Only explicitly allowlisted Spotify users (up to 25) can authenticate
+- Public access for unlimited users requires an approved organization account
+- This restriction is enforced by Spotify and cannot be bypassed in code
+
+As a result, this app cannot be used by arbitrary Spotify accounts unless they
+are added to the allowlist in the Spotify Developer Dashboard.
+
+---
+
+## Bring Your Own Spotify Credentials (Optional)
+
+Advanced users may modify the app to use their own Spotify OAuth credentials.
+By doing so, each user authenticates with their own Spotify developer app,
+avoiding the allowlist restriction.
+
+This approach is commonly used by open-source Spotify tools but is not enabled
+by default to keep the app simple and secure.
+
+---
+
 ## Tech Stack
 
 - Frontend: Vanilla HTML, CSS, JavaScript
@@ -160,6 +186,41 @@ This project is designed for **Vercel**.
   * Liked Songs (Spotify limitation)
   * Collaborative playlists
   * YouTube Music–specific metadata
+
+---
+
+## Who can use this app?
+
+- ✅ The app owner and allowlisted Spotify users
+- ✅ Testers, friends, or reviewers added to the allowlist
+- ❌ Arbitrary public Spotify users (Spotify policy restriction)
+
+Google / YouTube authentication works for all users. The limitation applies
+only to Spotify authentication.
+
+---
+
+## Why this limitation exists
+
+Spotify now requires apps that want unrestricted public access to apply for
+extended quota and partner access.
+
+As of May 2025:
+- Extended quota requests are accepted only from organizations
+- Individual developers cannot switch apps to unrestricted production mode
+
+This project complies fully with Spotify’s developer policies.
+
+---
+
+## Intended Use
+
+This project is intended as:
+- A personal utility
+- A technical demonstration of OAuth, API integration, and frontend/backend design
+- A portfolio project showcasing real-world API constraints and solutions
+
+It is not intended to be a commercial or large-scale public service.
 
 ---
 
