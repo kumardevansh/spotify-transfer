@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid content type' });
   }
 
-    // ✅ BASIC RATE LIMIT (ADD THIS)
+  
   const ip =
     (req.headers['x-forwarded-for'] || '').split(',')[0] || 'unknown';
 

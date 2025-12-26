@@ -1,22 +1,4 @@
 <!doctype html>
-<!--
-spot-mini: Frontend that avoids embedding OAuth client IDs
-
-CHANGELOG
-- This version removes CLIENT_IDs from the frontend. Instead the frontend redirects the user
-  to backend endpoints that start the OAuth flow (so client IDs live only on the server).
-
-REQUIREMENTS
-- You must deploy two simple backend endpoints that redirect to the provider auth URL:
-  - /api/auth_spotify -> redirects to Spotify authorize URL (server uses CLIENT_ID_SPOTIFY env var)
-  - /api/auth_google  -> redirects to Google authorize URL (server uses CLIENT_ID_GOOGLE env var)
-- The existing backend token exchange endpoint at /api/exchange_google remains required.
-
-WHY THIS IS OK
-- Client IDs are public by design and not secret. Still, some people prefer not to embed even client IDs
-  in distributed static HTML; this moves those IDs to the server.
-
--->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -125,10 +107,6 @@ WHY THIS IS OK
       background-color: #1f6feb;
       color: white;
     }
-    /* =========================
-   Playlist scrollbar fix
-   ========================= */
-
     select#playlistSelect {
       scrollbar-width: thin;                 /* Firefox */
       scrollbar-color: #12324a #071421;       /* Firefox */
@@ -163,18 +141,6 @@ WHY THIS IS OK
       The transfer is automated and may not always be accurate.
     </p>
     <div class="row">
-      <!-- <div class="col">
-        <div><strong>1) Spotify</strong></div>
-        <div style="margin-top:8px">
-          <button id="btnSpotifyLogin">Login with Spotify</button>
-          <span id="spotifyStatus" class="muted" style="margin-left:12px">Not logged in</span>
-        </div>
-        <div style="margin-top:12px">
-          <label class="muted">Choose playlist</label><br>
-          <select id="playlistSelect"><option value="">(login to load)</option></select>
-        </div>
-      </div> -->
-
       <div class="col">
         <div><strong>1) Google / YouTube</strong></div>
         <div style="margin-top:8px">
@@ -208,14 +174,9 @@ WHY THIS IS OK
       <div id="statusBox" style="margin-top:10px"></div>
     </div>
 
-    <!-- <div style="margin-top:14px">
-      <div><strong>Failures / notes</strong></div>
-      <div id="failList" style="margin-top:8px"></div>
-    </div>  -->
 
     <footer>
-      <!-- <div>Notes: This frontend no longer contains client IDs. You must deploy two small server endpoints: /api/auth_spotify and /api/auth_google which redirect the user to each provider's authorize URL (server uses env vars with client IDs and PKCE challenge). The server must also provide /api/exchange_google to exchange Google code for tokens.</div> -->
-      <p>
+       <p>
         <a href="/privacy.html">Privacy Policy</a> |
         <a href="/terms.html">Terms of Service</a>
       </p>
@@ -224,16 +185,14 @@ WHY THIS IS OK
 
   <script>
   document.addEventListener('DOMContentLoaded', () =>{
-    // --------------------------- CONFIG: fill these ---------------------------
-  // REDIRECT_URI is computed on the client but must match the value registered in Spotify & Google
-  const REDIRECT_URI = window.location.origin + window.location.pathname; // must match registered redirect exactly
-  // Backend endpoints (change if your server exposes different paths)
+  const REDIRECT_URI = window.location.origin + window.location.pathname; 
+  // Backend endpoints
   const BACKEND_AUTH_SPOTIFY = window.location.origin + '/api/auth_spotify';
   const BACKEND_AUTH_GOOGLE = window.location.origin + '/api/auth_google';
   const BACKEND_EXCHANGE = window.location.origin + '/api/exchange_google';
   // -------------------------------------------------------------------------
 
-  // Spotify & Google endpoints (used only for comments / fallback checks)
+  // Spotify & Google endpoints 
   const SPOTIFY_AUTHORIZE = 'https://accounts.spotify.com/authorize';
   const SPOTIFY_TOKEN = 'https://accounts.spotify.com/api/token';
   const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -596,3 +555,4 @@ WHY THIS IS OK
   </script>
 </body>
 </html>
+
