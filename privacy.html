@@ -1,122 +1,157 @@
-
-<!-- ////////////////////////////////////// -->
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Privacy Policy</title>
+  <meta charset="UTF-8" />
+  <title>Privacy Policy — Spotify to YouTube Music Transfer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- SAME STYLES AS HOME PAGE -->
   <style>
-    body{font-family:Inter,system-ui,Segoe UI,Arial;margin:0;background:#0f172a;color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh}
-    .card{width:880px;max-width:95%;background:linear-gradient(180deg,#071029, #071421);padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
-    h1{margin:0 0 12px;font-size:20px}
-    h2{margin-top:18px;font-size:16px}
-    p, li{color:#9fb3d3;font-size:14px;line-height:1.6}
-    ul{margin-left:20px}
-    a{color:#7ee7ff;text-decoration:underline}
-    footer{margin-top:18px;color:#6f8fb0;font-size:13px}
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, Segoe UI, Arial, sans-serif;
+      background: linear-gradient(180deg, #0f172a, #020617);
+      color: #e6eef8;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 880px;
+      max-width: 95%;
+      padding: 32px 20px 48px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, #071029, #071421);
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.6);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 26px;
+    }
+
+    h2 {
+      margin-top: 28px;
+      font-size: 18px;
+      color: #cfeff6;
+    }
+
+    p {
+      line-height: 1.6;
+      color: #9fb3d3;
+    }
+
+    ul {
+      margin-left: 20px;
+      color: #9fb3d3;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    a {
+      color: #7ee7ff;
+      text-decoration: underline;
+    }
+
+    footer {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #6f8fb0;
+    }
   </style>
 </head>
+
 <body>
+  <div class="container">
+    <div class="card">
 
-<h1>Privacy Policy</h1>
+      <h1>Privacy Policy</h1>
 
-<p>
-This Privacy Policy describes how the application
-<strong>Spotify to YouTube Music Transfer</strong>
-accesses, uses, and handles user data.
-</p>
+      <p>
+        This Privacy Policy explains how the application
+        <strong>Spotify to YouTube Music Transfer</strong>
+        accesses, uses, and handles Google user data.
+      </p>
 
-<h2>Data Accessed</h2>
+      <h2>Data Accessed</h2>
+      <p>The application accesses the following Google user data:</p>
+      <ul>
+        <li>YouTube account access via the YouTube Data API</li>
+        <li>Permission to create YouTube playlists</li>
+        <li>Permission to add videos to user-owned playlists</li>
+      </ul>
 
-<p>
-The application accesses the following Google user data through Google OAuth:
-</p>
+      <p>The application does <strong>not</strong> access:</p>
+      <ul>
+        <li>Google profile information</li>
+        <li>Email address</li>
+        <li>Contacts</li>
+        <li>Messages</li>
+        <li>Any non-YouTube Google services</li>
+      </ul>
 
-<ul>
-  <li>YouTube account access via the YouTube Data API</li>
-  <li>Permission to create YouTube playlists</li>
-  <li>Permission to add videos to user-owned YouTube playlists</li>
-</ul>
+      <h2>How the Data Is Used</h2>
+      <p>
+        Google user data is used only to:
+      </p>
+      <ul>
+        <li>Create a new YouTube playlist selected by the user</li>
+        <li>Search YouTube for matching videos for Spotify tracks</li>
+        <li>Add those videos to the playlist</li>
+      </ul>
 
-<p>
-The application does <strong>not</strong> access:
-</p>
+      <p>
+        The application does not use Google user data for analytics,
+        advertising, tracking, or marketing.
+      </p>
 
-<ul>
-  <li>User profile information</li>
-  <li>Email address</li>
-  <li>Contacts</li>
-  <li>Private messages</li>
-  <li>Any non-YouTube Google services</li>
-</ul>
+      <h2>Data Storage</h2>
+      <p>
+        No Google user data is stored on any server.
+      </p>
+      <p>
+        OAuth access tokens are stored temporarily in the user's browser
+        session (<code>sessionStorage</code>) and are deleted when the
+        session ends.
+      </p>
 
-<h2>How the Data Is Used</h2>
+      <h2>Data Sharing</h2>
+      <p>
+        The application does not share Google user data with third parties.
+      </p>
 
-<p>
-Google user data is used strictly for the following purposes:
-</p>
+      <h2>User Control and Revocation</h2>
+      <p>
+        Users can revoke access at any time from their
+        Google Account security settings.
+      </p>
 
-<ul>
-  <li>Creating a new YouTube playlist selected by the user</li>
-  <li>Searching for matching YouTube videos for Spotify tracks</li>
-  <li>Adding those videos to the created YouTube playlist</li>
-</ul>
+      <h2>Third-Party APIs</h2>
+      <ul>
+        <li>Spotify Web API (playlist reading)</li>
+        <li>YouTube Data API v3 (playlist creation and video insertion)</li>
+      </ul>
 
-<p>
-The application does not use Google user data for analytics, advertising,
-tracking, profiling, or marketing.
-</p>
+      <h2>Contact</h2>
+      <p>
+        For questions regarding this policy, contact:
+        <br />
+        <strong>your-email@example.com</strong>
+      </p>
 
-<h2>Data Storage</h2>
+    </div>
 
-<p>
-The application does not store Google user data on any server.
-</p>
-
-<p>
-OAuth access tokens are stored temporarily in the user's browser session
-(sessionStorage) and are automatically discarded when the session ends.
-</p>
-
-<p>
-No playlists, videos, tokens, or personal data are persisted or logged.
-</p>
-
-<h2>Data Sharing</h2>
-
-<p>
-The application does not share Google user data with any third parties.
-</p>
-
-<h2>User Control and Revocation</h2>
-
-<p>
-Users can revoke the application's access to their Google account at any time
-from the Google Account Security settings page.
-</p>
-
-<h2>Third-Party APIs</h2>
-
-<p>
-This application uses the following third-party APIs:
-</p>
-
-<ul>
-  <li>Spotify Web API (to read user playlists)</li>
-  <li>YouTube Data API v3 (to create playlists and add videos)</li>
-</ul>
-
-<h2>Contact</h2>
-
-<p>
-If you have any questions about this Privacy Policy, you may contact:
-</p>
-
-<p>
-<strong>your-email@example.com</strong>
-</p>
-
+    <footer>
+      <p>
+        <a href="/">← Back to Home</a>
+      </p>
+    </footer>
+  </div>
 </body>
 </html>
